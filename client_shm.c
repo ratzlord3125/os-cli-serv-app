@@ -5,7 +5,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
-#define SHM_SIZE 1024
+#define SHM_SIZE 1024 // defining size
 
 typedef struct {
     int client_id;
