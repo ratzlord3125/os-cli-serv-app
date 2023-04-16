@@ -1,3 +1,4 @@
 *.swp
 .~
 thumbs.db
+*.out
