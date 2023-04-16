@@ -2,6 +2,8 @@
 .~
 thumbs.db
 *.out
+*.exe
+*.o
 *
 !/**/
 !*.*
