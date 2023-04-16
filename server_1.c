@@ -1,74 +1,75 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
- 
-#define PORT 8080
-#define MAX_CLIENTS 10
-#define BUFFER_SIZE 1024
- 
-void handle_client(int client_socket) {
-    char buffer[BUFFER_SIZE];
-    int bytes_read;
-    while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0) {
-        buffer[bytes_read] = '\0'; // Null terminate the buffer
-        printf("Received message from client: %s\n", buffer);
-        // Process the request from the client and generate a response
-        // Here you can add your application logic
-        // In this example, we simply echo the message back to the client
-        send(client_socket, buffer, bytes_read, 0);
-    }
-    if (bytes_read == 0) {
-        printf("Client disconnected.\n");
-    } else {
-        perror("Error receiving data from client");
-    }
-    close(client_socket);
+#include <string.h>
+#include <pthread.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+
+// Shared memory structure for request and response
+typedef struct {
+    int request;
+    int response;
+} SharedMemory;
+
+SharedMemory *shared_mem;  // Pointer to shared memory
+pthread_mutex_t mutex;     // Mutex for synchronization
+
+void* handle_request(void* arg) {
+    int client_id = *((int*)arg);
+    printf("Handling request from client %d\n", client_id);
+    
+    // Process request
+    // In this example, we simply add 1 to the request value and set it as response
+    pthread_mutex_lock(&mutex);
+    shared_mem->response = shared_mem->request + 1;
+    pthread_mutex_unlock(&mutex);
+    
+    return NULL;
 }
- 
+
 int main() {
-    int server_socket;
-    struct sockaddr_in server_addr, client_addr;
-    int client_socket;
-    socklen_t client_addr_size = sizeof(client_addr);
- 
-    // Create a TCP socket
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1) {
-        perror("Error creating socket");
+    const int NUM_CLIENTS = 10;  // Number of clients
+    const int SHM_SIZE = sizeof(SharedMemory);  // Size of shared memory segment
+    const char* SHM_NAME = "/my_shared_memory";  // Name of shared memory segment
+
+    // Create shared memory segment
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("Error creating shared memory");
         exit(1);
     }
- 
-    // Set up the server address
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
- 
-    // Bind the server address to the socket
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
-        perror("Error binding socket");
+    ftruncate(shm_fd, SHM_SIZE);
+    shared_mem = (SharedMemory*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shared_mem == MAP_FAILED) {
+        perror("Error mapping shared memory");
         exit(1);
     }
- 
-    // Listen for incoming connections
-    if (listen(server_socket, MAX_CLIENTS) == -1) {
-        perror("Error listening for connections");
-        exit(1);
+
+    // Initialize shared memory
+    shared_mem->request = 0;
+    shared_mem->response = 0;
+    
+    // Initialize mutex
+    pthread_mutex_init(&mutex, NULL);
+
+    // Create threads for clients
+    pthread_t threads[NUM_CLIENTS];
+    int client_ids[NUM_CLIENTS];
+    for (int i = 0; i < NUM_CLIENTS; i++) {
+        client_ids[i] = i + 1;
+        pthread_create(&threads[i], NULL, handle_request, &client_ids[i]);
     }
- 
-    printf("Server is running and listening for connections...\n");
- 
-    // Accept incoming connections and handle them in separate threads
-    while (1) {
-        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_size);
-        if (client_socket == -1) {
-            perror("Error accepting connection");
-            exit(1);
-        }
-        printf("Client connected: %s\n", inet_ntoa(client_addr.sin_addr));
-        handle_client(client_socket);
+
+    // Wait for threads to finish
+    for (int i = 0; i < NUM_CLIENTS; i++) {
+        pthread_join(threads[i], NULL);
     }
- 
+
+    // Clean up
+    pthread_mutex_destroy(&mutex);
+    munmap(shared_mem, SHM_SIZE);
+    shm_unlink(SHM_NAME);
+    
     return 0;
 }
