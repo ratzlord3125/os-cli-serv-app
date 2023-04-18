@@ -1,72 +1,115 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <errno.h>
 
-#define SHM_SIZE 1024
+#define SHM_SIZE  sizeof(int)
 
-typedef struct {
-    int client_id;
-    char message[256];
-} Message;
+void* client_handler(void* arg);
 
-int main() {
-    int shmid;
-    key_t key = ftok("shared_memory", 65); // Generate a unique key for shared memory
+int main()
+{
+    int shm_fd;
+    void* ptr;
+    pthread_t thread;
+    int num_clients = 0;
 
-    // Create shared memory segment
-    shmid = shmget(key, SHM_SIZE, 0666 | IPC_CREAT);
-    if (shmid == -1) {
-        perror("shmget");
-        exit(1);
+    // create shared memory object
+    shm_fd = shm_open("/shm_obj", O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server: Shared memory segment created with shmid = %d\n", shmid);
-
-    // Attach shared memory segment to server's address space
-    Message* shared_memory = (Message*)shmat(shmid, NULL, 0);
-    if (shared_memory == (void*)-1) {
-        perror("shmat");
-        exit(1);
+    // resize shared memory object
+    if (ftruncate(shm_fd, SHM_SIZE) == -1) {
+        perror("ftruncate");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server: Shared memory segment attached to server's address space\n");
+    // map shared memory object to process address space
+    ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (ptr == MAP_FAILED) {
+        perror("mmap");
+        exit(EXIT_FAILURE);
+    }
+
+    // initialize shared memory value to 0
+    *(int*)ptr = 0;
 
     while (1) {
-        // Wait for client to write a request
-        while (shared_memory->client_id == 0) {
-            // Do nothing
+        // check if maximum number of threads reached
+        if (num_clients >= 5) {
+            sleep(1);
+            continue;
         }
 
-        // Process client's request
-        printf("Server: Received request from Client %d: %s\n", shared_memory->client_id, shared_memory->message);
+        // wait for a new client to connect
+        printf("Waiting for a new client to connect...\n");
 
-        // Reply to client
-        char reply[256];
-        snprintf(reply, sizeof(reply), "Server: Reply to Client %d", shared_memory->client_id);
-        strncpy(shared_memory->message, reply, sizeof(shared_memory->message));
-        shared_memory->client_id = 0; // Reset client ID
-
-        // Exit server if "exit" request received from client
-        if (strcmp(reply, "Server: Reply to Client exit") == 0) {
-            break;
+        // create new thread for client
+        if (pthread_create(&thread, NULL, client_handler, ptr) != 0) {
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
         }
+
+        // increment number of clients
+        num_clients++;
+
+        // detach thread to prevent memory leak
+        if (pthread_detach(thread) != 0) {
+            perror("pthread_detach");
+            exit(EXIT_FAILURE);
+        }
+
+        // print message to server
+        printf("New client connected\n");
     }
 
-    // Detach shared memory segment from server's address space
-    if (shmdt(shared_memory) == -1) {
-        perror("shmdt");
-        exit(1);
+    // unmap shared memory object
+    if (munmap(ptr, SHM_SIZE) == -1) {
+        perror("munmap");
+        exit(EXIT_FAILURE);
     }
 
-    // Remove shared memory segment
-    if (shmctl(shmid, IPC_RMID, NULL) == -1) {
-        perror("shmctl");
-        exit(1);
+    // close shared memory object
+    if (close(shm_fd) == -1) {
+        perror("close");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server: Shared memory segment removed\n");
+    // unlink shared memory object
+    if (shm_unlink("/shm_obj") == -1) {
+        perror("shm_unlink");
+        exit(EXIT_FAILURE);
+    }
 
     return 0;
+}
+
+void* client_handler(void* arg)
+{
+    int* shm_value = (int*)arg;
+    int num = rand() % 100 + 1;
+
+    // write random number to shared memory
+    *shm_value = num;
+
+    // print message to client
+    printf("Number sent to server: %d\n", num);
+
+    // wait for server to process number
+    sleep(1);
+
+    // read result from shared memory
+    int result = *shm_value;
+
+    // print result to client
+    printf("Server response: %d is %s\n", num, result % 2 == 0 ? "even" : "odd");
+
+    return NULL;
 }
