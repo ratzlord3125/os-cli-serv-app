@@ -31,7 +31,7 @@ int main()
     while (client_id == -1) {
         // Look for a free slot
         for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (connect_ptr[i] == 0) {
+            if (connect_ptr[i] == 1) {
 
                 connect_ptr[i] = getpid();
                 client_id = i + 1;

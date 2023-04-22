@@ -7,13 +7,16 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
+#define SHM_NAME "/my_shared_memory6"
+
 typedef struct {
     int request;
     int response;
+    pthread_mutex_t mutex;
 } SharedMemory;
 
 SharedMemory *shared_mem;
-pthread_mutex_t mutex;
+
 int is_running = 1;
 
 void handle_signal(int sig) {
@@ -26,9 +29,9 @@ void process_request(int client_id, int request) {
     int response = (request % 2 == 0) ? 1 : 0;
 
     // Send response to client
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&shared_mem->mutex);
     shared_mem->response = response;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&shared_mem->mutex);
     printf("Server sent response to client %d: %s\n", client_id, (response == 1) ? "EVEN" : "ODD");
 }
 
@@ -37,18 +40,18 @@ void *server_thread_function(void *arg) {
 
     // Wait for requests from clients
     while (is_running) {
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&shared_mem->mutex);
         int request = shared_mem->request;
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&shared_mem->mutex);
 
         if (request != 0) {
             printf("Server received request from client %d: %d\n", client_id, request);
             process_request(client_id, request);
 
             // Reset request in shared memory
-            pthread_mutex_lock(&mutex);
+            pthread_mutex_lock(&shared_mem->mutex);
             shared_mem->request = 0;
-            pthread_mutex_unlock(&mutex);
+            pthread_mutex_unlock(&shared_mem->mutex);
         }
 
         usleep(100000); // Sleep for 100ms to avoid busy waiting
@@ -60,7 +63,6 @@ void *server_thread_function(void *arg) {
 int main() {
     const int NUM_CLIENTS = 5;
     const int SHM_SIZE = sizeof(SharedMemory);
-    const char* SHM_NAME = "/my_shared_memory6";
 
     // Open shared memory segment
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
@@ -79,8 +81,17 @@ int main() {
     signal(SIGINT, handle_signal);
 
     // Initialize mutex
-    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_init(&shared_mem->mutex, NULL);
+ /*  while(1) {
 
+        pthread_mutex_lock(&shared_mem->mutex);
+        if(shared_mem->request is available?)
+            handle req func called
+        else
+            unlock and then sleep for 1s
+
+
+    */
     // Create server threads
     pthread_t server_threads[NUM_CLIENTS];
     int client_ids[NUM_CLIENTS];
@@ -95,7 +106,7 @@ int main() {
     }
 
     // Clean up
-    pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&shared_mem->mutex);
     munmap(shared_mem, SHM_SIZE);
     shm_unlink(SHM_NAME);
     

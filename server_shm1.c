@@ -18,7 +18,7 @@ void* client_handler(void* arg)
     int num;
 
     // create shared memory object
-    shm_fd = shm_open("/shm_obj", O_RDWR, 0666);
+    shm_fd = shm_open("/myshm", O_RDWR, 0666);
     if (shm_fd == -1) {
         perror("shm_open");
         exit(EXIT_FAILURE);
