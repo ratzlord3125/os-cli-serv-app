@@ -1,3 +1,9 @@
+// gcc client_v.c -o client_v -pthread -lrt && ./client_v
+
+/*
+--> remove plag
+--> run simultaneous clients and check functionality
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

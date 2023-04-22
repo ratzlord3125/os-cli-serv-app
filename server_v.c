@@ -1,3 +1,10 @@
+// gcc server_v.c -o server_v -lpthread -lrt && ./server_v
+
+/* 
+--> remove plag
+--> check THREAD_STATE working for multiple clients and how to clear mem when ctrl+c pressed during thread exec.
+--> make SERVER RESPONSE functionalities
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
