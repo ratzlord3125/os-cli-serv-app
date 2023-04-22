@@ -7,10 +7,10 @@
 #include <sys/stat.h>
 #include <pthread.h>
 
-#define SHM_NAME "/connect" 
+#define SHM_NAME "/myshm" 
 #define SHM_SIZE sizeof(struct connect_data)
 
-#define MAX_CLIENTS 100 
+#define MAX_CLIENTS 10 
 #define MAX_USERNAME_LENGTH 100 
 
 //connect channel
@@ -49,12 +49,35 @@ struct client_data {
     struct server_response response;
 };
 
+void action_menu()
+{
+    printf("****ACTION MENU****\nEnter any of the following numbers for desired operation\n");
+    printf("0 : Simple Calculator\n");
+    printf("1 : Even-Odd Checker\n");
+    printf("2 : Check if Prime Number\n");
+    printf("3 : Negative Number Detector\n");
+
+    printf("7 : Print Menu Again\n");
+    printf("8 : Terminate Session\n");
+    printf("9 : UNREGISTER\n");
+}
+int resp_handler()
+{
+    printf("Are you sure?(y/n)");
+    char resp; 
+    scanf("%s", &resp); 
+    putchar('\n'); 
+    if(resp == 'y') {
+        return 1;
+    }
+    return 0;
+}
 
 
 int main() {
     //CREATING CONNECTION SHM
 
-    int connect_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    int connect_fd = shm_open(SHM_NAME, O_RDWR, S_IRUSR | S_IWUSR);
     if(connect_fd < 0) {
         perror("shm_open"); 
         return 1; 
@@ -127,29 +150,34 @@ int main() {
     }
 
     printf("~Connection to server has been made\n"); 
-    int exit = 0; 
+    int loop_state = 0;
 
-    while(!exit) {
+    while(1) {
         if(data->served_registration_request == 0) continue; 
-        int sc; 
-        printf("Which Service? \n0 : Calculator | 1 : Even or Odd | 2 : Is Prime | 3 : Is Negative\n");
+        int sc;
+        if(data->times_serviced == 0) {
+            action_menu();
+            printf("Enter your choice : \n");
+        }
+        else 
+            printf("Enter your next choice (7 for menu) : \n");
+        
         scanf("%d", &sc); 
         switch(sc) {
             case 0 : 
-                printf("Service Chosen : Calculator\n"); 
+                printf("Current Operation : Calculator\n");
                 int n1, n2, op; 
-                printf("First Number : ");
+                printf("Enter First Number : ");
                 scanf("%d", &n1); putchar('\n');  
-                printf("Second Number : ");
+                printf("Enter Second Number : ");
                 scanf( "%d", &n2); putchar('\n');  
-                printf("0 - Addition | 1 - Subtraction | 2 - Multiplication | 3 - Division\n");
-                printf("Operator : "); 
+                printf("Choose an operator : 0 - Addition, 1 - Subtraction, 2 - Multiplication, 3 - Division\n"); 
                 scanf("%d", &op); putchar('\n'); 
                 data->request.service_code = 0;
                 data->request.n1 = n1; data->request.n2 = n2; data->request.op_type = op; 
                 break; 
             case 1 : 
-                printf("Service Chosen : Even / Odd\n"); 
+                printf("Current Operation : Even / Odd\n"); 
                 int x; 
                 printf("Number : "); 
                 scanf("%d", &x); 
@@ -158,7 +186,7 @@ int main() {
                 data->request.service_code = 1;
                 break; 
             case 2 : 
-                printf("Service Chosen : Is Prime\n"); 
+                printf("Current Operation : Is Prime\n"); 
                 printf("Number : "); 
                 scanf("%d", &x); 
                 putchar('\n'); 
@@ -166,19 +194,56 @@ int main() {
                 data->request.service_code = 2;
                 break; 
             case 3 : 
-                printf("Service Chosen : Is Negative \n"); 
+                printf("Current Operation : Is Negative \n"); 
                 printf("Number : "); 
                 scanf("%d", &x); 
                 putchar('\n'); 
                 data->request.isNegative = x; 
                 data->request.service_code = 3;
                 break; 
+            case 7 : 
+                action_menu();
+                loop_state = 1;
+                break;
+            case 8 : 
+                loop_state = resp_handler()?2:1;
+                break;
+            case 9 :
+                loop_state = resp_handler()?3:1;
+                break;
+            default : 
+                printf("Invalid Choice...\n");
+                loop_state = 1;
         }
+        // conditions to check the last 3 options
+        if(loop_state == 1)
+        {
+            loop_state = 0;
+            continue;
+        }
+        else if(loop_state == 2)
+        {
+            printf("Stopping Client... \n");
+            //data->active = 0;
+            break;
+        }
+        else if(loop_state == 3)
+        {
+            printf("Stopping Client... \n");
+            data->active = 0;
+            printf("Terminating...\n"); 
+            break;
+        }
+
         data->times_serviced++; 
         data->served_registration_request = 0; 
-        printf("Request Sent to Server\n"); 
-        while(data->served_registration_request == 0); //wait until response 
-        printf("Received Response from Server\n"); 
+
+        printf("Request sent to server\n"); 
+        while(data->served_registration_request == 0) {
+            usleep(500); //wait until response 
+            printf("Waiting for response...\n");
+        }
+        printf("Received response from server!\n"); 
 
         switch (sc) {
             case 0: 
@@ -192,17 +257,6 @@ int main() {
                 break; 
             case 3: 
                 printf("Is Negative : %d\n", data->response.isNegative); 
-        }
-
-        char cont; 
-        printf("Do you want' to continue (y/n)");
-        scanf("%s", &cont); 
-        putchar('\n'); 
-        if(cont != 'y'){
-            printf("Stopping Client... \n");
-            data->active = 0;
-            printf("Terminating...\n"); 
-            break;
         }
     }
  

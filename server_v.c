@@ -7,10 +7,10 @@
 #include <sys/stat.h>
 #include <pthread.h>
 
-#define SHM_NAME "/connect" 
+#define SHM_NAME "/myshm" 
 #define SHM_SIZE sizeof(struct connect_data)
 
-#define MAX_CLIENTS 100 
+#define MAX_CLIENTS 10 
 #define MAX_USERNAME_LENGTH 100 
 
 //connect channel
@@ -26,7 +26,7 @@ struct connect_data {
 // client channel
 struct client_request { 
     int service_code; //0 - operation | 1 - even or odd | 2 - is prime | 3 - is negative 
-    int n1, n2, op_type; 
+    int n1, n2, operator; 
     int evenOdd; 
     int isPrime; 
     int isNegative; 
@@ -184,7 +184,7 @@ void* thread_handler(void* arg){
             printf("%s's channel : received response of code :: %d \n", channel_name, code); 
 
             if(code == 0) {
-                int n1 = data->request.n1, n2 = data->request.n2, op= data->request.op_type; 
+                int n1 = data->request.n1, n2 = data->request.n2, op= data->request.operator; 
                 int ans;
                 switch(op) {
                     case 0:
