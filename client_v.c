@@ -14,7 +14,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#define SHM_NAME "/myshm" 
+#define SHM_NAME "/myshm" // shared memory for connect channel
 #define SHM_SIZE sizeof(struct connect_data)
 
 #define MAX_CLIENTS 10 
@@ -24,15 +24,15 @@
 // struct for connect channel
 struct connect_data { 
     pthread_rwlock_t lock; 
-    int response_code; //0 - ok | 1 - uid in use | 2 - uid too long
+    int response_code; // 0-success, 1-uid rereg, 2 - uid in use
     int reg_flag; 
     char request[MAX_UID_LENGTH]; 
-    char response[MAX_UID_LENGTH*2]; 
+    char response[MAX_UID_LENGTH]; 
 }; 
 
 // struct for request in comm channel of each client
 struct action_request { 
-    int action_code; //0 - operation | 1 - even or odd | 2 - is prime | 3 - is negative 
+    int action_code; // server based actions: 1-calc, 2-odd/even, 3-prime, 4-negative
     int n1, n2, operator; 
 };
 
@@ -48,16 +48,19 @@ struct client_data {
     int registered;
 };
 
-struct connect_data* connect_data; // for shm of connect channel
+struct connect_data* connect_data_ptr; // for shm of connect channel
 struct client_data* data; // for shm of comm channel
 void action_menu(); // for printing the menu
 int resp_handler(); // for confirmation dialogues
-void handle_signal(int sig); // handling sigint
+
+void handle_signal(int sig); // handling SIGINT
 
 int main() {
+    printf("Client has been started!!\n");
+
     signal(SIGINT,handle_signal);
 
-    //CREATING CONNECTION SHM
+    // creating connect channel shared memory
     int connect_fd = shm_open(SHM_NAME, O_RDWR, S_IRUSR | S_IWUSR);
     if(connect_fd < 0) {
         perror("shm_open"); 
@@ -72,58 +75,59 @@ int main() {
     }
 
     // mmaping the data for the connect channel shared mem
-    connect_data = (struct connect_data*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, connect_fd, 0); 
-    if(connect_data == MAP_FAILED) {
+    connect_data_ptr = (struct connect_data*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, connect_fd, 0); 
+    if(connect_data_ptr == MAP_FAILED) {
         perror("mmap"); 
         return 1; 
     }
 
     // uid registration loop starts here 
     int conn_flag = 0; 
-    char channel_name[MAX_UID_LENGTH]; 
+    char client_channel_name[MAX_UID_LENGTH]; 
     while(!conn_flag) {
         printf("Enter your UID : "); 
         char uid[MAX_UID_LENGTH]; 
         scanf("%s", uid); 
 
         while(1) { // continuous attempt to wrlock
-            int busy_server_flag = pthread_rwlock_trywrlock(&connect_data->lock); 
+            int busy_server_flag = pthread_rwlock_trywrlock(&connect_data_ptr->lock); 
 
             if(!busy_server_flag) { // no other client waiting for response
-                strcpy(connect_data->request, uid);
+                strcpy(connect_data_ptr->request, uid);
+                printf("UID sent to server = %s\n",connect_data_ptr->request);
                 printf("Sent registration request for \"%s\" from client\n", uid); 
                 
                 // wait for response from server
-                connect_data->reg_flag = 0; 
-                while(connect_data->reg_flag == 0) {
+                connect_data_ptr->reg_flag = 0; 
+                while(connect_data_ptr->reg_flag == 0) {
                     usleep(10000);
                     printf("Attempting to register to server...\n");
                 }
                 
                 // checking uid uniqueness
-                if(connect_data->response_code == 2) {
+                if(connect_data_ptr->response_code == 2) {
                     conn_flag = 0; 
                     printf("Entered UID already active in other client :(\n"); 
                 }
-                else if(connect_data->response_code == 1) {
+                else if(connect_data_ptr->response_code == 1) {
                     conn_flag = 1; 
-                    printf("Existing UID is reregistered successfully!\nRegistered channel name :: %s\n", connect_data->response); 
-                    strcpy(channel_name, connect_data->response); 
+                    printf("Existing UID is reregistered successfully!\nRegistered channel name :: %s\n", connect_data_ptr->response); 
+                    strcpy(client_channel_name, connect_data_ptr->response); 
                 }
                 else {
                     conn_flag = 1; 
-                    printf("New UID is registered successfully!\nRegistered channel name :: %s\n", connect_data->response); 
-                    strcpy(channel_name, connect_data->response); 
+                    printf("New UID is registered successfully!\nRegistered channel name :: %s\n", connect_data_ptr->response); 
+                    strcpy(client_channel_name, connect_data_ptr->response); 
                 }
-                // wrlock not release until response
-                pthread_rwlock_unlock(&connect_data->lock); 
+                // rwlock not release until response
+                pthread_rwlock_unlock(&connect_data_ptr->lock); 
                 break;
             }
         }
     }
 
     // communication with channel
-    int cli_fd = shm_open(channel_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    int cli_fd = shm_open(client_channel_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if(cli_fd < 0) {
         perror("shm_open"); 
         return 1; 
