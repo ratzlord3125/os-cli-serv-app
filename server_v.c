@@ -248,7 +248,7 @@ void* handle_client(void* arg) {
                             oper = "*";
                             break; 
                         case 4: 
-                            ans = n1/n2; 
+                            ans = n2!=0?(n1/n2):__INT_MAX__; 
                             oper = "/";
                             break; 
                     }
