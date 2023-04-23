@@ -1,8 +1,15 @@
-// gcc server_v.c -o server_v -lpthread -lrt && ./server_v
-
-/* 
---> make more SERVER RESPONSE functionalities
+/*
+Team members:
+Aditya Kumar
+Aditya Seth
+Ayush Mishra
+Anmol Goyal
+Puneet Agarwal
+Kaushik Chetluri
 */
+
+// run here : gcc A2_25_server.c -o A2_25_server -lpthread -lrt && ./A2_25_server
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
