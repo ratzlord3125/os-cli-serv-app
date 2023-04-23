@@ -2,7 +2,7 @@
 
 /* 
 --> remove more plag
---> modify max clients condition so that loop runs again if a client deregisters
+--> 
 --> make more SERVER RESPONSE functionalities
 */
 #include <stdio.h>
@@ -99,7 +99,12 @@ int main() {
     printf("Server Initialisation Successful\n"); 
 
     // loop for connect channel
-    while(CLIENTS_SERVICED < MAX_CLIENTS) {
+    while(1) {
+        while(CLIENTS_SERVICED == MAX_CLIENTS) { // if max clients limit is reached
+            printf("Max number of clients reached! No more clients can join now unless any unregistration occurs\n");
+            usleep(1000000);
+        }
+
         if(connect_data_ptr->reg_flag==0) {
             //Start serving the request
             //Bit flipped to 0 only after all write funcs done 
@@ -181,10 +186,6 @@ int main() {
             connect_data_ptr->reg_flag =1; 
         }
     }
-    // if max clients limit is reached
-    if(CLIENTS_SERVICED == MAX_CLIENTS) {
-        printf("Max number of clients reached! No more clients can join now\n");
-    }
 }
 
 void* handle_client(void* arg) {
@@ -225,7 +226,7 @@ void* handle_client(void* arg) {
             char temp[MAX_STRING_LENGTH]; // for storing the formatted result based on action
             int x,n1,n2,op,ans;
             
-            printf("Comm channel \"%s\" : received response of code :: %d \n", client_channel_name, code); 
+            printf("Comm channel \"%s\" : Received action-response of code %d \n", client_channel_name, code); 
 
             switch(code) {
                 case 0 :

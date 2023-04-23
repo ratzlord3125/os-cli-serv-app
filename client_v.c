@@ -17,7 +17,6 @@
 #define SHM_NAME "/myshm" // shared memory for connect channel
 #define SHM_SIZE sizeof(struct connect_data)
 
-#define MAX_CLIENTS 10 
 #define MAX_UID_LENGTH 100 
 #define MAX_STRING_LENGTH 10000
 
