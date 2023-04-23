@@ -48,7 +48,7 @@ struct client_data {
 };
 
 struct connect_data* connect_data_ptr; // for shm of connect channel
-struct client_data* data; // for shm of comm channel
+struct client_data* client_data_ptr; // for shm of comm channel
 void action_menu(); // for printing the menu
 int resp_handler(); // for confirmation dialogues
 
@@ -137,8 +137,8 @@ int main() {
         return 1; 
     }
 
-    data = (struct client_data*) mmap(NULL, sizeof(struct client_data), PROT_READ | PROT_WRITE, MAP_SHARED, cli_fd, 0);
-    if(data == MAP_FAILED) {
+    client_data_ptr = (struct client_data*) mmap(NULL, sizeof(struct client_data), PROT_READ | PROT_WRITE, MAP_SHARED, cli_fd, 0);
+    if(client_data_ptr == MAP_FAILED) {
         perror("mmap"); 
         return 1; 
     }
@@ -147,14 +147,14 @@ int main() {
     int loop_state = 0;
 
     while(1) {
-        while(!data->request_flag) {
+        while(!client_data_ptr->request_flag) {
             usleep(10000);
             printf("Preparing for sending action requests...");
         }
         
         int sc;
         
-        if(data->times_action_requested == 0) { // for first time service
+        if(client_data_ptr->times_action_requested == 0) { // for first time service
             action_menu();
             printf("Enter your choice : \n");
         }
@@ -173,10 +173,10 @@ int main() {
                 scanf("%d", &n2);
                 printf("Choose an operator : 1 - Addition, 2 - Subtraction, 3 - Multiplication, 4 - Division\n"); 
                 scanf("%d", &op);
-                data->request.action_code = 0;
-                data->request.n1 = n1; 
-                data->request.n2 = n2; 
-                data->request.operator = op; 
+                client_data_ptr->request.action_code = 0;
+                client_data_ptr->request.n1 = n1; 
+                client_data_ptr->request.n2 = n2; 
+                client_data_ptr->request.operator = op; 
                 break; 
             case 1 : 
                 printf("Current Operation : Even/Odd Checker\n"); 
@@ -184,27 +184,27 @@ int main() {
                 printf("Number : "); 
                 scanf("%d", &x); 
                 putchar('\n'); 
-                data->request.n1 = x; 
-                data->request.action_code = 1;
+                client_data_ptr->request.n1 = x; 
+                client_data_ptr->request.action_code = 1;
                 break; 
             case 2 : 
                 printf("Current Operation : Prime Checker\n"); 
                 printf("Number : "); 
                 scanf("%d", &x); 
                 putchar('\n'); 
-                data->request.n1 = x; 
-                data->request.action_code = 2;
+                client_data_ptr->request.n1 = x; 
+                client_data_ptr->request.action_code = 2;
                 break; 
             case 3 : 
                 printf("Current Operation : Negative Checker\n"); 
                 printf("Number : "); 
                 scanf("%d", &x); 
                 putchar('\n'); 
-                data->request.n1 = x; 
-                data->request.action_code = 3;
+                client_data_ptr->request.n1 = x; 
+                client_data_ptr->request.action_code = 3;
                 break; 
             case 6 : 
-                printf("Number of actions performed by this client = %d\n",data->times_action_requested+1);
+                printf("Number of actions performed by this client = %d\n",client_data_ptr->times_action_requested+1);
                 loop_state = 1;
                 break;
             case 7 : 
@@ -225,33 +225,33 @@ int main() {
         // conditions to execute the client specific options
         if(loop_state == 1) {
             loop_state = 0;
-            data->times_action_requested++; 
+            client_data_ptr->times_action_requested++; 
             continue;
         }
         else if(loop_state == 2) {
-            data->active = 0;
+            client_data_ptr->active = 0;
             handle_signal(SIGINT);
             break;
         }
         else if(loop_state == 3) {
-            data->registered = 0;
-            data->active = 0;
+            client_data_ptr->registered = 0;
+            client_data_ptr->active = 0;
             printf("Terminating and clearing all memory...\n"); 
             // memory clearing takes place in server
             handle_signal(SIGINT);
             break;
         }
 
-        data->times_action_requested++; 
-        data->request_flag = 0; 
+        client_data_ptr->times_action_requested++; 
+        client_data_ptr->request_flag = 0; 
 
         printf("Request sent to server\n"); 
-        while(data->request_flag == 0) {
+        while(client_data_ptr->request_flag == 0) {
             usleep(10000); //wait until response 
             printf("Waiting for response...\n");
         }
         printf("Received response from server\n"); 
-        printf("%s\n",data->response);
+        printf("%s\n",client_data_ptr->response);
     } 
 }
 
@@ -282,8 +282,8 @@ int resp_handler()
 
 void handle_signal(int sig) {
     // ctrl+c should terminate the client but not unregister an active client
-    if(data != NULL && data->active) {
-        data->active = 0;
+    if(client_data_ptr != NULL && client_data_ptr->active) {
+        client_data_ptr->active = 0;
     }
     printf(" Exiting Client...\n");
     exit(EXIT_SUCCESS);

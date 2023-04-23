@@ -205,24 +205,24 @@ void* handle_client(void* arg) {
         exit(EXIT_FAILURE); 
     }
 
-    struct client_data* data = (struct client_data*) mmap(NULL, sizeof(struct client_data), PROT_READ | PROT_WRITE, MAP_SHARED, client_fd, 0);
-    if(data == MAP_FAILED) {
+    struct client_data* client_data_ptr = (struct client_data*) mmap(NULL, sizeof(struct client_data), PROT_READ | PROT_WRITE, MAP_SHARED, client_fd, 0);
+    if(client_data_ptr == MAP_FAILED) {
         perror("mmap"); 
         exit(EXIT_FAILURE); 
     }
 
-    data->request_flag = 1; 
-    data->active = 1; 
-    data->registered = 1;
-    data->times_action_requested = 0; 
-    pthread_rwlock_init(&data->lock, NULL); 
+    client_data_ptr->request_flag = 1; 
+    client_data_ptr->active = 1; 
+    client_data_ptr->registered = 1;
+    client_data_ptr->times_action_requested = 0; 
+    pthread_rwlock_init(&client_data_ptr->lock, NULL); 
     printf("Comm channel \"%s\" : Succesfully Initialised\n", client_channel_name);
 
-    while(data->active) {
+    while(client_data_ptr->active) {
         THREAD_STATE = 1;
-        if(data->request_flag == 0 && data->active) {
+        if(client_data_ptr->request_flag == 0 && client_data_ptr->active) {
 
-            int code = data->request.action_code; 
+            int code = client_data_ptr->request.action_code; 
             char temp[MAX_STRING_LENGTH]; // for storing the formatted result based on action
             int x,n1,n2,op,ans;
             
@@ -230,9 +230,9 @@ void* handle_client(void* arg) {
 
             switch(code) {
                 case 0 :
-                    n1 = data->request.n1; 
-                    n2 = data->request.n2; 
-                    op = data->request.operator;
+                    n1 = client_data_ptr->request.n1; 
+                    n2 = client_data_ptr->request.n2; 
+                    op = client_data_ptr->request.operator;
                     char* oper;
                     switch(op) {
                         case 1:
@@ -255,11 +255,11 @@ void* handle_client(void* arg) {
                     sprintf(temp,"Result : %d%s%d = %d",n1,oper,n2,ans);
                     break;
                 case 1 :
-                    x = data->request.n1;
+                    x = client_data_ptr->request.n1;
                     sprintf(temp,"Result : %d is an %s number",x,(x%2)?"odd":"even");
                     break;
                 case 2 :
-                    x = data->request.n1; 
+                    x = client_data_ptr->request.n1; 
                     int prime = 1; 
                     for(int i=2; i<x/2; i++) 
                         if(x%i == 0) 
@@ -268,13 +268,13 @@ void* handle_client(void* arg) {
                     sprintf(temp,"Result : %d is %s prime number",x,prime?"a":"not a");
                     break;
                 case 3 :
-                    x = data->request.n1; 
+                    x = client_data_ptr->request.n1; 
                     sprintf(temp,"Result : %d is a %s number",x,(x<0)?"negative":"positive");
                     break;
             }
             printf("Comm channel \"%s\" : Response generated = \"%s\"\n",client_channel_name, temp);
-            strcpy(data->response,temp);
-            data->request_flag = 1;
+            strcpy(client_data_ptr->response,temp);
+            client_data_ptr->request_flag = 1;
             printf("Comm channel \"%s\" : Sent Response to client\n", client_channel_name);  
         }
          
@@ -289,7 +289,7 @@ void* handle_client(void* arg) {
     }
 
     // checking the registration status of the current terminated client
-    if(data->registered) {
+    if(client_data_ptr->registered) {
         printf("Comm channel \"%s\" : Connection has been terminated but still registered\n", client_channel_name); 
         clients_active[p].inactive_reg_flag = 1;
         // not changing THREAD_STATE because memory still needs to be cleared if SIGINT occurs
@@ -297,7 +297,7 @@ void* handle_client(void* arg) {
     else {
         printf("Comm channel \"%s\" : Unregistered! Connection has been terminated and memory cleared\n", client_channel_name); 
         // unmapping memory and unlinking shared memory of this client
-        munmap(data,sizeof(struct client_data));
+        munmap(client_data_ptr,sizeof(struct client_data));
         shm_unlink(client_channel_name);
 
         clients_active[p].inactive_reg_flag = 0;
@@ -308,7 +308,7 @@ void* handle_client(void* arg) {
         CLIENTS_SERVICED--;
         THREAD_STATE = 0;
     }
-    //printf("%s's channel : Times Pinged : %d", client_channel_name, data->times_action_requested); 
+    //printf("%s's channel : Times Pinged : %d", client_channel_name, client_data_ptr->times_action_requested); 
     
     pthread_exit(EXIT_SUCCESS);
 }
