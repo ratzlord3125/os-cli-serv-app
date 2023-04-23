@@ -55,7 +55,9 @@ struct client {
     pthread_t tid; 
 };
 
-int CLIENTS_SERVED = 0; 
+int CLIENTS_ACTIV = 0; 
+int TOTAL_CLIENTS_SERVED = 0; 
+int TOTAL_SERVICES = 0;
 int THREAD_STATE = 0;
 struct client clients_active[MAX_CLIENTS]; 
 struct connect_data* connect_data_ptr;
@@ -99,19 +101,20 @@ int main() {
 
     // loop for connect channel
     while(1) {
-        while(CLIENTS_SERVED == MAX_CLIENTS) { // if max clients limit is reached
+        while(CLIENTS_ACTIV == MAX_CLIENTS) { // if max clients limit is reached
             printf("Max number of clients reached! No more clients can join now unless any unregistration occurs\n");
             usleep(1000000); // sleep 1 sec
         }
 
         if(connect_data_ptr->reg_flag==0) { // when server is ready to receive requests
+            TOTAL_SERVICES++;
             char current_uid[MAX_UID_LENGTH];
             printf("Connect channel : UID received from client = %s\n",connect_data_ptr->request);
             strcpy(current_uid, connect_data_ptr->request); 
 
             int exist_flag = 0; 
             int exist_ptr = 0;
-            for(int i=0; i<CLIENTS_SERVED; i++) {
+            for(int i=0; i<CLIENTS_ACTIV; i++) {
                 if(strcmp(clients_active[i].uid, current_uid)==0) {
                     if(clients_active[i].inactive_reg_flag == 1) {
                         exist_flag = 1;
@@ -124,9 +127,9 @@ int main() {
 
             if(exist_flag == 0) {  // new and unique client
                 printf("Connect channel : New UID received = %s\n", current_uid);
-                strcpy(clients_active[CLIENTS_SERVED].uid, current_uid); 
-                clients_active[CLIENTS_SERVED].inactive_reg_flag = 0;
-                clients_active[CLIENTS_SERVED].times_serviced = 1; 
+                strcpy(clients_active[CLIENTS_ACTIV].uid, current_uid); 
+                clients_active[CLIENTS_ACTIV].inactive_reg_flag = 0;
+                clients_active[CLIENTS_ACTIV].times_serviced = 1; 
 
                 connect_data_ptr->response_code = 0; // success
 
@@ -136,12 +139,13 @@ int main() {
                 printf("Connect channel : Created a comm channel \"%s\" for user = %s\n", channel_name, current_uid); 
 
                 //creating thread to handle client
-                pthread_t* curr_tid = &clients_active[CLIENTS_SERVED].tid; 
+                pthread_t* curr_tid = &clients_active[CLIENTS_ACTIV].tid; 
                 pthread_create(curr_tid, NULL, handle_client, channel_name); 
-                printf("Connect channel : Created thread to handle user :: %s\n", current_uid);
+                printf("Connect channel : Created thread (tid = %lu) to handle user :: %s\n", curr_tid, current_uid);
 
-                CLIENTS_SERVED++;
-                printf("Connect channel : Clients served updated = %d\n", CLIENTS_SERVED);
+                CLIENTS_ACTIV++;
+                TOTAL_CLIENTS_SERVED++; 
+                printf("Connect channel : Clients active updated = %d\n", CLIENTS_ACTIV);
             }
             
             else if(exist_flag == 1) { // existing inactive client
@@ -159,15 +163,27 @@ int main() {
                 //creating thread to handle client
                 pthread_t* curr_tid = &clients_active[exist_ptr].tid; 
                 pthread_create(curr_tid, NULL, handle_client, channel_name); 
-                printf("Connect channel : Recreated thread to handle user = %s\n", current_uid); 
+                printf("Connect channel : Recreated thread (tid = %lu) to handle user = %s\n",curr_tid, current_uid); 
                 
-                printf("Connect channel : Clients served unchanged = %d\n", CLIENTS_SERVED); // remains the same
+                printf("Connect channel : Clients served unchanged = %d\n", CLIENTS_ACTIV); // remains the same
             }
             else if(exist_flag == 2) { // existing active client
                 printf("Connect channel : Received UID %s already in use!!\n", current_uid); 
                 connect_data_ptr->response_code = 2; // in use
                 connect_data_ptr->response[0] = '\0'; 
             } 
+
+            // logging list of clients
+            putchar('\n');
+            printf("List of clients currently active : \n");
+            for(int i=0; i<CLIENTS_ACTIV; i++) {
+                printf("Client uid \"%s\" :: currently %s\n",clients_active[i].uid,clients_active[i].inactive_reg_flag?"inactive":"active");
+            }
+            putchar('\n');
+            printf("Total clients served = %d\n", TOTAL_CLIENTS_SERVED);
+            printf("Total number of requests serviced = %d\n",TOTAL_SERVICES);
+            putchar('\n');
+            
             // flag change only after complete registration response is sent and server is started 
             connect_data_ptr->reg_flag =1; 
         }
@@ -262,13 +278,17 @@ void* handle_client(void* arg) {
             strcpy(client_data_ptr->response,temp);
             client_data_ptr->request_flag = 1;
             printf("Comm channel \"%s\" : Sent Response to client\n", client_channel_name);  
+
+            //printf("Comm channel \"%s\" : Times actions used till now in this session = %d", client_channel_name, client_data_ptr->times_action_requested); 
         }
          
     }
 
+    int curr_actions_count = ++(client_data_ptr->times_action_requested);  // counting termination/unreg as a request
+
     // finding the current terminated client
     int p;
-    for(int i=0; i<CLIENTS_SERVED; i++) {
+    for(int i=0; i<CLIENTS_ACTIV; i++) {
         if(strcmp(clients_active[i].uid, client_channel_name)==0) {
             p=i;
         }
@@ -276,38 +296,41 @@ void* handle_client(void* arg) {
 
     // checking the registration status of the current terminated client
     if(client_data_ptr->registered) {
-        printf("Comm channel \"%s\" : Connection has been terminated but still registered\n", client_channel_name); 
+        printf("Comm channel \"%s\" : Connection has been terminated but user still registered\n", client_channel_name); 
         clients_active[p].inactive_reg_flag = 1;
         // not changing THREAD_STATE because memory still needs to be cleared if SIGINT occurs
     } 
     else {
-        printf("Comm channel \"%s\" : Unregistered! Connection has been terminated and memory cleared\n", client_channel_name); 
+        printf("Comm channel \"%s\" : Unregistered! Connection has been terminated and memory is being cleared\n", client_channel_name); 
         // unmapping memory and unlinking shared memory of this client
         munmap(client_data_ptr,sizeof(struct client_data));
         shm_unlink(client_channel_name);
 
         clients_active[p].inactive_reg_flag = 0;
         // also shifting the array so that space can be saved
-        for(int i=p; i<CLIENTS_SERVED-1; i++) {
+        for(int i=p; i<CLIENTS_ACTIV-1; i++) {
             clients_active[i] = clients_active[i+1];
         }
-        CLIENTS_SERVED--;
+        CLIENTS_ACTIV--;
         THREAD_STATE = 0;
     }
-    //printf("%s's channel : Times Pinged : %d", client_channel_name, client_data_ptr->times_action_requested); 
     
+    TOTAL_SERVICES += curr_actions_count;
     pthread_exit(EXIT_SUCCESS);
 }
 
 void handle_signal(int sig) {
     if(THREAD_STATE) {
         printf(" Clearing and unlinking thread memory (if any)...\n");
-        for(int i=0; i<CLIENTS_SERVED; i++) {
+        for(int i=0; i<CLIENTS_ACTIV; i++) {
             printf("Unlinking shared memory for %s\n",clients_active[i].uid );
             //munmap(??, sizeof(struct client_data));
             shm_unlink(clients_active[i].uid);
         }
     }
+    printf("Final total clients served = %d\n",TOTAL_CLIENTS_SERVED);
+    printf("Final total requests served = %d\n",TOTAL_SERVICES);
+
     // clear memory and unlink shm
     printf(" Clearing and unlinking connect memory...\n");
     munmap(connect_data_ptr, SHM_SIZE);
