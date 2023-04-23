@@ -1,8 +1,7 @@
 // gcc client_v.c -o client_v -pthread -lrt && ./client_v
 
 /*
---> remove more plag
---> run simultaneous clients and check functionality
+--> add more client resp options if possible 
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,21 +62,21 @@ int main() {
     int connect_fd = shm_open(SHM_NAME, O_RDWR, S_IRUSR | S_IWUSR);
     if(connect_fd < 0) {
         perror("shm_open"); 
-        return 1; 
+        exit(EXIT_FAILURE);
     } 
     else 
         printf("Connected to connect channel shared memory (fd = %d)\n", connect_fd); 
     
     if(ftruncate(connect_fd, SHM_SIZE) != 0) {
         perror("ftruncate"); 
-        return 1; 
+        exit(EXIT_FAILURE);
     }
 
     // mmaping the data for the connect channel shared mem
     connect_data_ptr = (struct connect_data*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, connect_fd, 0); 
     if(connect_data_ptr == MAP_FAILED) {
         perror("mmap"); 
-        return 1; 
+        exit(EXIT_FAILURE);
     }
 
     // uid registration loop starts here 
@@ -92,31 +91,31 @@ int main() {
             int busy_server_flag = pthread_rwlock_trywrlock(&connect_data_ptr->lock); 
 
             if(!busy_server_flag) { // no other client waiting for response
+                printf("Sending UID \"%s\" to server\n",uid);
                 strcpy(connect_data_ptr->request, uid);
-                printf("UID sent to server = %s\n",connect_data_ptr->request);
-                printf("Sent registration request for \"%s\" from client\n", uid); 
+                printf("Sent registration request for \"%s\" from client\n", connect_data_ptr->request); 
                 
                 // wait for response from server
                 connect_data_ptr->reg_flag = 0; 
                 while(connect_data_ptr->reg_flag == 0) {
-                    usleep(10000);
+                    usleep(500000); // sleep 0.5 sec
                     printf("Attempting to register to server...\n");
                 }
                 
                 // checking uid uniqueness
-                if(connect_data_ptr->response_code == 2) {
-                    conn_flag = 0; 
-                    printf("Entered UID already active in other client :(\n"); 
-                }
-                else if(connect_data_ptr->response_code == 1) {
-                    conn_flag = 1; 
-                    printf("Existing UID is reregistered successfully!\nRegistered channel name :: %s\n", connect_data_ptr->response); 
-                    strcpy(client_channel_name, connect_data_ptr->response); 
-                }
-                else {
+                if(connect_data_ptr->response_code == 0) { // new uid
                     conn_flag = 1; 
                     printf("New UID is registered successfully!\nRegistered channel name :: %s\n", connect_data_ptr->response); 
                     strcpy(client_channel_name, connect_data_ptr->response); 
+                }
+                else if(connect_data_ptr->response_code == 1) { // inactive uid
+                    conn_flag = 1; 
+                    printf("Existing UID is re-registered successfully!\nRegistered channel name :: %s\n", connect_data_ptr->response); 
+                    strcpy(client_channel_name, connect_data_ptr->response); 
+                }
+                else if(connect_data_ptr->response_code == 2) { // active uid
+                    conn_flag = 0; 
+                    printf("Entered UID already active in other client :(\n"); 
                 }
                 // rwlock not release until response
                 pthread_rwlock_unlock(&connect_data_ptr->lock); 
@@ -129,12 +128,12 @@ int main() {
     int cli_fd = shm_open(client_channel_name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if(cli_fd < 0) {
         perror("shm_open"); 
-        return 1; 
+        exit(EXIT_FAILURE);
     } else printf("Connected to client shared memory (fd = %d)\n", cli_fd); 
 
     if(ftruncate(cli_fd, sizeof(struct client_data)) != 0) {
         perror("ftruncate"); 
-        return 1; 
+        exit(EXIT_FAILURE);
     }
 
     client_data_ptr = (struct client_data*) mmap(NULL, sizeof(struct client_data), PROT_READ | PROT_WRITE, MAP_SHARED, cli_fd, 0);
@@ -148,7 +147,7 @@ int main() {
 
     while(1) {
         while(!client_data_ptr->request_flag) {
-            usleep(10000);
+            usleep(500000);
             printf("Preparing for sending action requests...");
         }
         
@@ -171,7 +170,7 @@ int main() {
                 scanf("%d", &n1);
                 printf("Enter Second Number : ");
                 scanf("%d", &n2);
-                printf("Choose an operator : 1 - Addition, 2 - Subtraction, 3 - Multiplication, 4 - Division\n"); 
+                printf("Choose an operator : 1-Addition | 2-Subtraction | 3-Multiplication | 4-Division\n"); 
                 scanf("%d", &op);
                 client_data_ptr->request.action_code = 0;
                 client_data_ptr->request.n1 = n1; 
@@ -247,7 +246,7 @@ int main() {
 
         printf("Request sent to server\n"); 
         while(client_data_ptr->request_flag == 0) {
-            usleep(10000); //wait until response 
+            usleep(500000); // wait until response is received
             printf("Waiting for response...\n");
         }
         printf("Received response from server\n"); 
