@@ -306,8 +306,8 @@ void* handle_client(void* arg) {
     } 
     else {
         printf("Comm channel \"%s\" : Unregistered! Connection has been terminated and memory is being cleared\n", client_channel_name); 
-        // unmapping memory and unlinking shared memory of this client
-        munmap(client_data_ptr,sizeof(struct client_data));
+        //unmapping memory and unlinking shared memory of this client
+        //munmap(client_data_ptr,sizeof(struct client_data));
         shm_unlink(client_channel_name);
 
         clients_active[p].inactive_reg_flag = 0;

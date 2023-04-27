@@ -1,4 +1,4 @@
-// gcc client_v.c -o client_v -pthread -lrt && ./client_v
+// gcc A2_25_client.c -o client_v -pthread -lrt && ./client_v
 
 /*
 --> add more client resp options if possible 
