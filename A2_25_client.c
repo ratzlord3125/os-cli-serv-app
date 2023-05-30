@@ -1,8 +1,15 @@
-// gcc A2_25_client.c -o client_v -pthread -lrt && ./client_v
-
 /*
---> add more client resp options if possible 
+Team members:
+Aditya Kumar
+Aditya Seth
+Ayush Mishra
+Anmol Goyal
+Puneet Agarwal
+Kaushik Chetluri
 */
+
+// run here : gcc A2_25_client.c -o A2_25_client -lpthread -lrt && ./A2_25_client
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

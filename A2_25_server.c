@@ -297,6 +297,8 @@ void* handle_client(void* arg) {
             p=i;
         }
     }
+    
+    pthread_mutex_destroy(&client_data_ptr->mtx); 
 
     // checking the registration status of the current terminated client
     if(client_data_ptr->registered) {
@@ -307,7 +309,7 @@ void* handle_client(void* arg) {
     else {
         printf("Comm channel \"%s\" : Unregistered! Connection has been terminated and memory is being cleared\n", client_channel_name); 
         //unmapping memory and unlinking shared memory of this client
-        //munmap(client_data_ptr,sizeof(struct client_data));
+        munmap(client_data_ptr,sizeof(struct client_data));
         shm_unlink(client_channel_name);
 
         clients_active[p].inactive_reg_flag = 0;
@@ -320,7 +322,6 @@ void* handle_client(void* arg) {
     }
     
     TOTAL_SERVICES += curr_actions_count;
-    pthread_mutex_destroy(&client_data_ptr->mtx); 
     pthread_exit(EXIT_SUCCESS);
 }
 
